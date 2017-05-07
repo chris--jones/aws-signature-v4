@@ -20,6 +20,6 @@
   "author": "Robert Sköld <robert@department.se>",
   "license": "MIT",
   "devDependencies": {
-    "mocha": "^2.2.5"
+    "mocha": "^3.3.0"
   }
 }

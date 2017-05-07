@@ -100,6 +100,65 @@ exports.createPresignedURL = function(method, host, path, service, payload, opti
   return options.protocol + '://' + host + path + '?' + querystring.stringify(query);
 };
 
+exports.generatePolicy = function(expiry, bucket, acl, redirect, uuid, key, date, region, service, conditions) {
+  return {
+    expiration: expiry.toISOString(),
+    conditions: [
+      { bucket : bucket },
+      { acl : acl },
+      { success_action_redirect : redirect },
+      {"x-amz-meta-uuid": uuid },
+      {"x-amz-server-side-encryption": "AES256"},
+      {"x-amz-credential": key+'/'+toDate(date)+'/'+region+'/'+service+'/aws4_request'},
+      {"x-amz-algorithm": "AWS4-HMAC-SHA256"},
+      {"x-amz-date": toTime(date) }
+    ].concat(conditions||[])
+  };
+}
+
+exports.createS3FormFields = function(options) {
+  var expiry = new Date(),
+  date = options.date || new Date(),
+  acl = options.acl || 'public-read',
+  uuid = options.uuid || Math.random().toString(10).substring(2),
+  region = options.region || 'us-east-1',
+  service = 's3';
+  expiry.setSeconds(expiry.getSeconds()+(options.expiry || 86400));
+  var policy = exports.generatePolicy(expiry,
+    options.bucket,
+    acl,
+    options.redirect,
+    uuid,
+    options.key,
+    date,
+    region,
+    service,
+    options.conditions),
+  base64Policy = new Buffer(JSON.stringify(policy)).toString('base64'),
+  signature = exports.createSignature(options.secret,date,region,service,base64Policy),
+  formFields = {
+    acl : acl,
+    success_action_redirect : options.redirect,
+    'x-amz-meta-uuid' : uuid,
+    'x-amz-server-side-encryption' : 'AES256',
+    'X-Amz-Credential' : options.key+'/'+toDate(date)+'/'+region+'/'+service+'/aws4_request',
+    'X-Amz-Algorithm' : 'AWS4-HMAC-SHA256',
+    'X-Amz-Date' : toTime(date),
+    'Policy' : base64Policy,
+    'X-Amz-Signature' : signature
+  };
+  if (options.objectKey) {
+    formFields['key'] = options.objectKey;
+  }
+  if (options.contentType) {
+    formFields['Content-Type'] = options.contentType;
+  }
+  if (options.metaTag) {
+    formFields['x-amz-meta-tag'] = options.metaTag;
+  }
+  return formFields;
+}
+
 function toTime(time) {
   return new Date(time).toISOString().replace(/[:\-]|\.\d{3}/g, '');
 }
